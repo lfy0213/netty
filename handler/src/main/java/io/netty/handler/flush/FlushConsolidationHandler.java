@@ -26,6 +26,10 @@ import io.netty.channel.ChannelPromise;
 import java.util.concurrent.Future;
 
 /**
+ *
+ *
+ *
+ *
  * {@link ChannelDuplexHandler} which consolidates {@link Channel#flush()} / {@link ChannelHandlerContext#flush()}
  * operations (which also includes
  * {@link Channel#writeAndFlush(Object)} / {@link Channel#writeAndFlush(Object, ChannelPromise)} and
