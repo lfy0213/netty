@@ -40,6 +40,7 @@ import java.nio.charset.Charset;
 import static io.netty.util.internal.MathUtil.isOutOfBounds;
 
 /**
+ * 缓冲区的骨架实现
  * A skeletal implementation of a buffer.
  */
 public abstract class AbstractByteBuf extends ByteBuf {
@@ -63,6 +64,10 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
     }
 
+    /**
+     * 泄露检测器，用于检测对象是否泄露
+     * 定义为static,那么所有子类实例共用一个检测器
+     */
     static final ResourceLeakDetector<ByteBuf> leakDetector =
             ResourceLeakDetectorFactory.instance().newResourceLeakDetector(ByteBuf.class);
 
@@ -220,11 +225,14 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
 
         if (readerIndex != writerIndex) {
+            //字节数组复制,将尚未读取的字节数组复制到缓存区的起始位置，然后重新设置索引。
             setBytes(0, this, readerIndex, writerIndex - readerIndex);
             writerIndex -= readerIndex;
+            //调整标志位
             adjustMarkers(readerIndex);
             readerIndex = 0;
         } else {
+            //说明没有可以读的字节数组，那么直接调整mark即可实现缓冲区重用。
             adjustMarkers(readerIndex);
             writerIndex = readerIndex = 0;
         }
@@ -863,6 +871,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf readBytes(int length) {
+        //检查可读的字节数，如果超过可读的话，就抛数组越界异常。
         checkReadableBytes(length);
         if (length == 0) {
             return Unpooled.EMPTY_BUFFER;

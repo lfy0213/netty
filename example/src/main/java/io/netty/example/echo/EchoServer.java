@@ -47,16 +47,39 @@ public final class EchoServer {
         } else {
             sslCtx = null;
         }
-
+        /**
+         * NioEventLoopGroup 相当于 1 个事件循环组
+         * 这个组里包含多个事件循环 NioEventLoop，每个 NioEventLoop 包含 1 个 Selector 和 1 个事件循环线程。
+         * bossGroup的作用：
+         * 1、轮询Accept事件，
+         * 2、处理 Accept I/O 事件，与Client建立连接，生成NioServerSocketChannel,并将 NioSocketChannel 注册到某个 Worker NioEventLoop 的 Selector 上。
+         * 3、处理任务队列中的任务，runAllTasks。任务队列中的任务包括用户调用 eventloop.execute 或 schedule 执行的任务，或者其他线程提交到该 eventloop 的任务。
+         */
         // Configure the server.
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
+
+
+        /**
+         * 1、轮询 Read、Write 事件。
+         * 2、处理 I/O 事件，即 Read、Write 事件，在 NioSocketChannel 可读、可写事件发生时进行处理。
+         * 3、处理任务队列中的任务，runAllTasks。
+         */
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         final EchoServerHandler serverHandler = new EchoServerHandler();
         try {
+
+            /**
+             * 基于 ServerBootstrap(服务端启动引导类)，配置 EventLoopGroup、Channel 类型，连接参数、配置入站、出站事件 handler。
+             */
             ServerBootstrap b = new ServerBootstrap();
+
+            //组装bootstrap
             b.group(bossGroup, workerGroup)
+                    //设置channel为nio类型
              .channel(NioServerSocketChannel.class)
+                    //设置连接配置参数
              .option(ChannelOption.SO_BACKLOG, 100)
+                    //配置handler
              .handler(new LoggingHandler(LogLevel.INFO))
              .childHandler(new ChannelInitializer<SocketChannel>() {
                  @Override
@@ -70,6 +93,7 @@ public final class EchoServer {
                  }
              });
 
+            //绑定端口
             // Start the server.
             ChannelFuture f = b.bind(PORT).sync();
 

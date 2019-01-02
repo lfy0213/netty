@@ -41,6 +41,9 @@ import java.util.NoSuchElementException;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 /**
+ *
+ * 将多个ByteBuf的实例组合到一起，形成一个统一的视图
+ * 例如协议POJO对象有两部分，分别是请求头和请求体，分别对应两个Buffer，需要消息解码的时候组合一起进行解码，这个时候可以利用这个类进行组合。
  * A virtual buffer which shows multiple buffers as a single merged buffer.  It is recommended to use
  * {@link ByteBufAllocator#compositeBuffer()} or {@link Unpooled#wrappedBuffer(ByteBuf...)} instead of calling the
  * constructor explicitly.

@@ -24,13 +24,26 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import static io.netty.util.internal.ObjectUtil.checkPositive;
 
 /**
+ * 主要是对引用进行计数，类似JVM内存回收的对象引用计数器，用于跟踪对象的分配和销毁，做自动内存回收。
  * Abstract base class for {@link ByteBuf} implementations that count references.
  */
 public abstract class AbstractReferenceCountedByteBuf extends AbstractByteBuf {
+
+    /**
+     * 标识refCnt字段在AbstractReferenceCountedByteBuf中的内存地址
+     * 该内存地址的获取是JDK强相关的，如果使用SUN公司的JDK，通过Unsafe的ObjectFieldOffset接口获得。
+     */
     private static final long REFCNT_FIELD_OFFSET;
+
+    /**
+     * 通过原子的方式对成员变量进行更新等操作，以实现线程安全，消除锁。
+     */
     private static final AtomicIntegerFieldUpdater<AbstractReferenceCountedByteBuf> refCntUpdater =
             AtomicIntegerFieldUpdater.newUpdater(AbstractReferenceCountedByteBuf.class, "refCnt");
 
+    /**
+     * 跟踪对象的引用次数
+     */
     private volatile int refCnt = 1;
 
     static {

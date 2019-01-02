@@ -244,6 +244,11 @@ import java.nio.charset.UnsupportedCharsetException;
  *
  * Please refer to {@link ByteBufInputStream} and
  * {@link ByteBufOutputStream}.
+ *
+ * 1、JDK中的byteBuffer长度固定，一旦初始化完毕后，无法修改，如果放入buffer中的对象大于buffer长度，会报错
+ * 2、byteBuffer中的API比较难用，如flip()、rewind()等操作。而netty中buffer采用2个指针，读写分开，不需要额外操作
+ * 3、功能有限
+ *
  */
 @SuppressWarnings("ClassMayBeInterface")
 public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {

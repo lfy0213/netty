@@ -39,17 +39,31 @@ import java.util.List;
 import java.util.Map;
 
 /**
+ * 对于NioServerSocketChannel，他的任务就是接受客户端连接，创建包含SocketChannel的NioSocketChannel加入到buf中。
+ *
  * A {@link io.netty.channel.socket.ServerSocketChannel} implementation which uses
  * NIO selector based implementation to accept new connections.
  */
 public class NioServerSocketChannel extends AbstractNioMessageChannel
                              implements io.netty.channel.socket.ServerSocketChannel {
 
+    /**
+     * channel元数据
+     */
     private static final ChannelMetadata METADATA = new ChannelMetadata(false, 16);
+
+    /**
+     *
+     */
     private static final SelectorProvider DEFAULT_SELECTOR_PROVIDER = SelectorProvider.provider();
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(NioServerSocketChannel.class);
 
+    /**
+     * 通过SelectorProvider来打开一条ServerSocketChannel
+     * @param provider
+     * @return
+     */
     private static ServerSocketChannel newSocket(SelectorProvider provider) {
         try {
             /**
@@ -65,6 +79,9 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
         }
     }
 
+    /**
+     * 定义了一些TCP的参数，用户创建NioServerSocketChannel时初始化
+     */
     private final ServerSocketChannelConfig config;
 
     /**
@@ -104,6 +121,10 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
         return config;
     }
 
+    /**
+     * 判断服务器监听端口是否处于绑定状态
+     * @return
+     */
     @Override
     public boolean isActive() {
         return javaChannel().socket().isBound();
@@ -114,16 +135,29 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
         return null;
     }
 
+    /**
+     * 返回 java.nio.ServerSocketChannel
+     * @return
+     */
     @Override
     protected ServerSocketChannel javaChannel() {
         return (ServerSocketChannel) super.javaChannel();
     }
 
+    /**
+     * 获取地址
+     * @return
+     */
     @Override
     protected SocketAddress localAddress0() {
         return SocketUtils.localSocketAddress(javaChannel().socket());
     }
 
+    /**
+     * 绑定的时候，可以指定backLog，也就是允许客户端排队的最大长度。
+     * @param localAddress
+     * @throws Exception
+     */
     @Override
     protected void doBind(SocketAddress localAddress) throws Exception {
         if (PlatformDependent.javaVersion() >= 7) {
@@ -138,13 +172,23 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
         javaChannel().close();
     }
 
+    /**
+     * 读取消息
+     * @param buf
+     * @return
+     * @throws Exception
+     */
     @Override
     protected int doReadMessages(List<Object> buf) throws Exception {
+        //通过accept接受客户端连接
         SocketChannel ch = SocketUtils.accept(javaChannel());
 
         try {
+            //如果SocketChannel不为空。
             if (ch != null) {
+                //利用当前的NioServerSocketChannel和SocketChannel创建新的NioSocketChannel，并加入buf中。
                 buf.add(new NioSocketChannel(this, ch));
+                //最后返回1，表示服务端消息读取成功。
                 return 1;
             }
         } catch (Throwable t) {
@@ -160,6 +204,14 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
         return 0;
     }
 
+
+
+
+
+    /**
+     * <--------下面的方法都是客户端Channel相关的，所以服务端Channel无需实现，当服务端调用时会报错------------>
+     *
+     */
     // Unnecessary stuff
     @Override
     protected boolean doConnect(

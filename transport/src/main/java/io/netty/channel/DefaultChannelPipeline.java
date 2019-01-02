@@ -254,6 +254,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             EventExecutorGroup group, String baseName, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
         final AbstractChannelHandlerContext ctx;
+
+        /**
+         * IO线程和用户线程的并发访问
+         * 多个用户线程的并发访问
+         */
         synchronized (this) {
             checkMultiplicity(handler);
             name = filterName(name, handler);

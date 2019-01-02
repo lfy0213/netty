@@ -21,6 +21,7 @@ import io.netty.util.internal.InternalThreadLocalMap;
 import java.util.Map;
 
 /**
+ * 骨架实现
  * Skeleton implementation of a {@link ChannelHandler}.
  */
 public abstract class ChannelHandlerAdapter implements ChannelHandler {

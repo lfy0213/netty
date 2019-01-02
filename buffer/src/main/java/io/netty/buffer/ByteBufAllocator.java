@@ -16,6 +16,8 @@
 package io.netty.buffer;
 
 /**
+ *
+ * 字节缓冲区分配器
  * Implementations are responsible to allocate buffers. Implementations of this interface are expected to be
  * thread-safe.
  */

@@ -37,8 +37,19 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
  */
 public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
 
+    /**
+     * 用于UnpooledHeapByteBuf的内存分配
+     */
     private final ByteBufAllocator alloc;
+
+    /**
+     * 缓冲数组，使用byte数组的原因是提升性能和更加便捷的操作。JDK中的ByteBuffer底层实现也是byte数组。
+     */
     byte[] array;
+
+    /**
+     * 用于实现Netty中buffer到NIO中的buffer转换
+     */
     private ByteBuffer tmpNioBuf;
 
     /**
@@ -117,30 +128,53 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
         return array.length;
     }
 
+    /**
+     * 动态扩容逻辑
+     * @param newCapacity
+     * @return
+     */
     @Override
     public ByteBuf capacity(int newCapacity) {
+        //对参数进行合法校验，如小于0等，抛异常。
         checkNewCapacity(newCapacity);
 
         int oldCapacity = array.length;
         byte[] oldArray = array;
+        //如果容量值大于当前的缓冲区容量，需要扩容。
         if (newCapacity > oldCapacity) {
+            //分配一个大小为新容量的数组
             byte[] newArray = allocateArray(newCapacity);
+            //将旧数组中的数据拷贝到新数组中。
             System.arraycopy(oldArray, 0, newArray, 0, oldArray.length);
+            //将新数组设置到Buffer中，同时将tmpNioBuf置为空。
             setArray(newArray);
+            //释放旧数组内存
             freeArray(oldArray);
         } else if (newCapacity < oldCapacity) {
+            //如果新容量小于当前的缓冲区容量，则不需要扩展,但是需要截取当前缓冲区创建一个新的子缓冲区。
+
+            //分配一个基于新容量大小的数组
             byte[] newArray = allocateArray(newCapacity);
+            //获取reader指针
             int readerIndex = readerIndex();
+            //如果指针的位置小于新容量的值
             if (readerIndex < newCapacity) {
+                //获取writer指针
                 int writerIndex = writerIndex();
+                //如果writer指针的值在新容量之后
                 if (writerIndex > newCapacity) {
+                    //将writer指针设置到新容量的位置
                     writerIndex(writerIndex = newCapacity);
                 }
+                //复制reader->writer这一段的可读内容到新数组中
                 System.arraycopy(oldArray, readerIndex, newArray, readerIndex, writerIndex - readerIndex);
             } else {
+                //如果指针的位置大于新容量的值，将读写指针设置为新的容量
                 setIndex(newCapacity, newCapacity);
             }
+            //将新数组设置到Buffer中，同时将tmpNioBuf置为空。
             setArray(newArray);
+            //释放旧数组内存
             freeArray(oldArray);
         }
         return this;

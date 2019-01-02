@@ -73,6 +73,12 @@ import java.net.SocketAddress;
  * It is important to call {@link #close()} or {@link #close(ChannelPromise)} to release all
  * resources once you are done with the {@link Channel}. This ensures all resources are
  * released in a proper way, i.e. filehandles.
+ *
+ *
+ * 采用facade模式进行统一封装，将网络IO及相关联的操作封装起来，提供对外的接口。
+ * 当channel进行IO操作的时候，会产生对应的事件，然后驱动事件在ChannelPipeLine中传播，由handler处理。
+ * 网络IO操作，一般直接调用DefaultChannelPipeLine中的方法。
+ *
  */
 public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparable<Channel> {
 

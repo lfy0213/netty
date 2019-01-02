@@ -55,16 +55,36 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     private static final NotYetConnectedException FLUSH0_NOT_YET_CONNECTED_EXCEPTION = ThrowableUtil.unknownStackTrace(
             new NotYetConnectedException(), AbstractUnsafe.class, "flush0()");
 
+    /**
+     * 代表父类channel
+     */
     private final Channel parent;
+    /**
+     * channel全局唯一Id
+     */
     private final ChannelId id;
+    /**
+     * channel的辅助内部类
+     */
     private final Unsafe unsafe;
+    /**
+     * 管道
+     */
     private final DefaultChannelPipeline pipeline;
     private final VoidChannelPromise unsafeVoidPromise = new VoidChannelPromise(this, false);
     private final CloseFuture closeFuture = new CloseFuture(this);
 
     private volatile SocketAddress localAddress;
     private volatile SocketAddress remoteAddress;
+
+    /**
+     * 绑定的eventLoop
+     */
     private volatile EventLoop eventLoop;
+
+    /**
+     * 是否已经注册到eventLoop
+     */
     private volatile boolean registered;
     private boolean closeInitiated;
 
@@ -218,6 +238,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         return pipeline.bind(localAddress);
     }
 
+    /**
+     * 直接调用pipeline中的方法，由其中的handler处理事件
+     * @param remoteAddress
+     * @return
+     */
     @Override
     public ChannelFuture connect(SocketAddress remoteAddress) {
         return pipeline.connect(remoteAddress);
@@ -455,6 +480,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             return remoteAddress0();
         }
 
+        /**
+         * 将当前Unsafe对应的Channel注册到EventLoop中。
+         * @param eventLoop
+         * @param promise
+         */
         @Override
         public final void register(EventLoop eventLoop, final ChannelPromise promise) {
             if (eventLoop == null) {
@@ -471,10 +501,12 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
 
             AbstractChannel.this.eventLoop = eventLoop;
-
+            //判断当前线程是不是channel对应的EventLoop线程，如果是的话，那么就不存在线程安全问题。
+            //如果直接执行register0(promise)操作的话，会存在多线程并发操作Channel的问题。
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
+                //如果不是的话，那么就将register0(promise)这个操作封装成一个任务，丢进evnetLoop中。直到当前线程是channel对应的EventLoop线程
                 try {
                     eventLoop.execute(new Runnable() {
                         @Override
@@ -495,13 +527,19 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
         private void register0(ChannelPromise promise) {
             try {
+
+                //判断当前Channel是否处于打开状态，不是打开状态直接返回。
                 // check if the channel is still open as it could be closed in the mean time when the register
                 // call was outside of the eventLoop
                 if (!promise.setUncancellable() || !ensureOpen(promise)) {
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
+
+                //主逻辑----AbstractNioUnsafe对应的AbstractNioChannel实现
+                //如果没有抛异常的话，说明注册成功
                 doRegister();
+
                 neverRegistered = false;
                 registered = true;
 
@@ -509,10 +547,15 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // user may already fire events through the pipeline in the ChannelFutureListener.
                 pipeline.invokeHandlerAddedIfNeeded();
 
+                //将ChannelPromise结果置为成功
                 safeSetSuccess(promise);
+
+                //判断当前的Channel是否被激活（激活是指连接建立）
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
+
+                //如果已经激活，调用pipeline.fireChannelActive()方法;
                 if (isActive()) {
                     if (firstRegistration) {
                         pipeline.fireChannelActive();
@@ -525,6 +568,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     }
                 }
             } catch (Throwable t) {
+                //如果抛异常的话，强制关闭连接，并将堆栈信息设置到ChannelPromise
                 // Close the channel directly to avoid FD leak.
                 closeForcibly();
                 closeFuture.setClosed();
@@ -856,6 +900,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
         }
 
+        /**
+         * 将数据添加到环形数组
+         * @param msg
+         * @param promise
+         */
         @Override
         public final void write(Object msg, ChannelPromise promise) {
             assertEventLoop();
@@ -888,6 +937,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             outboundBuffer.addMessage(msg, size, promise);
         }
 
+
+        /**
+         * 将发送缓缓冲区的数据全部通过channel发送到通信对方
+         */
         @Override
         public final void flush() {
             assertEventLoop();
@@ -1059,6 +1112,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     protected abstract SocketAddress remoteAddress0();
 
     /**
+     *
      * Is called after the {@link Channel} is registered with its {@link EventLoop} as part of the register process.
      *
      * Sub-classes may override this method

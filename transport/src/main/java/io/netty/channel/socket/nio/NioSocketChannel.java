@@ -51,12 +51,18 @@ import java.util.concurrent.Executor;
 import static io.netty.channel.internal.ChannelUtils.MAX_BYTES_PER_GATHERING_WRITE_ATTEMPTED_LOW_THRESHOLD;
 
 /**
+ * 客户端Channel
  * {@link io.netty.channel.socket.SocketChannel} which uses NIO selector based implementation.
  */
 public class NioSocketChannel extends AbstractNioByteChannel implements io.netty.channel.socket.SocketChannel {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(NioSocketChannel.class);
     private static final SelectorProvider DEFAULT_SELECTOR_PROVIDER = SelectorProvider.provider();
 
+    /**
+     * 创建一个SocketChannel
+     * @param provider
+     * @return
+     */
     private static SocketChannel newSocket(SelectorProvider provider) {
         try {
             /**
@@ -81,6 +87,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     }
 
     /**
+     * 创建一个使用自定义SelectorProvider的新实例
      * Create a new instance using the given {@link SelectorProvider}.
      */
     public NioSocketChannel(SelectorProvider provider) {
@@ -88,6 +95,8 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     }
 
     /**
+     * 创建一个使用自定义SocketChannel的新实例
+     * 如果没有传这个参数的话，默认使用newSocket(provider)中产生的SocketChannel
      * Create a new instance using the given {@link SocketChannel}.
      */
     public NioSocketChannel(SocketChannel socket) {
@@ -105,6 +114,10 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         config = new NioSocketChannelConfig(this, socket.socket());
     }
 
+    /**
+     * 返回父channel
+     * @return
+     */
     @Override
     public ServerSocketChannel parent() {
         return (ServerSocketChannel) super.parent();
@@ -115,11 +128,19 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         return config;
     }
 
+    /**
+     * 返回JDK中的channel
+     * @return
+     */
     @Override
     protected SocketChannel javaChannel() {
         return (SocketChannel) super.javaChannel();
     }
 
+    /**
+     * 看socket是否打开以及是否连接到服务端
+     * @return
+     */
     @Override
     public boolean isActive() {
         SocketChannel ch = javaChannel();
@@ -294,6 +315,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     }
 
     private void doBind0(SocketAddress localAddress) throws Exception {
+        //判断JDK版本信息，兼容不同版本
         if (PlatformDependent.javaVersion() >= 7) {
             SocketUtils.bind(javaChannel(), localAddress);
         } else {
@@ -301,21 +323,40 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         }
     }
 
+
+    /**
+     * 连接方法。
+     * @param remoteAddress
+     * @param localAddress
+     * @return
+     * @throws Exception
+     */
     @Override
     protected boolean doConnect(SocketAddress remoteAddress, SocketAddress localAddress) throws Exception {
+        //判断本地地址是否为空，不为空则绑定本地地址。
         if (localAddress != null) {
             doBind0(localAddress);
         }
-
+        //成功标志符
         boolean success = false;
         try {
+            // 发起连接。
+            // 此时可能会有3种状态
+            // 1、连接成功，返回true
+            // 2、暂时没有连接上，服务端没有返回ACK，连接结果不确定，返回false
+            // 3、连接失败，直接抛异常
             boolean connected = SocketUtils.connect(javaChannel(), remoteAddress);
+
+            //如果没有连接成功
             if (!connected) {
+                //设置OP_CONNECT标志位，像selector注册事件，监听连接网络操作位。。
                 selectionKey().interestOps(SelectionKey.OP_CONNECT);
             }
             success = true;
+            //返回连接状态。
             return connected;
         } finally {
+            //如果SocketUtils.connect抛异常的话，说明服务端拒绝了这个连接或者请求被REST掉了。这个时候就要关闭这个连接。
             if (!success) {
                 doClose();
             }
@@ -372,9 +413,18 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         }
     }
 
+    /**
+     * 写半包操作
+     * @param in
+     * @throws Exception
+     */
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
+        /**
+         * 获取JDK中的channel
+         */
         SocketChannel ch = javaChannel();
+
         int writeSpinCount = config().getWriteSpinCount();
         do {
             if (in.isEmpty()) {
