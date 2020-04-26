@@ -84,6 +84,9 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private volatile Thread thread;
     @SuppressWarnings("unused")
     private volatile ThreadProperties threadProperties;
+    /**
+     * ThreadPerTaskExecutor
+     */
     private final Executor executor;
     private volatile boolean interrupted;
 
@@ -162,7 +165,10 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         this.addTaskWakesUp = addTaskWakesUp;
         this.maxPendingTasks = Math.max(16, maxPendingTasks);
         this.executor = ObjectUtil.checkNotNull(executor, "executor");
+        // 创建任务队列
         taskQueue = newTaskQueue(this.maxPendingTasks);
+        // 任务队列满，线程池采用的拒绝策略，默认是抛异常，throw new RejectedExecutionException()
+        // RejectedExecutionHandlers.reject()
         rejectedExecutionHandler = ObjectUtil.checkNotNull(rejectedHandler, "rejectedHandler");
     }
 
@@ -773,9 +779,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         if (task == null) {
             throw new NullPointerException("task");
         }
-
+        // 当前线程是否是EventLoop绑定的线程
         boolean inEventLoop = inEventLoop();
+        // 添加任务到EventLoop中的taskQueue
         addTask(task);
+        // 如果不是的话，那么启动EventLoop，同时将自己绑定到EventLoop，线程开始陷入死循环
         if (!inEventLoop) {
             startThread();
             if (isShutdown() && removeTask(task)) {
@@ -881,11 +889,15 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         }
     }
 
+    /**
+     * 启动eventLoop
+     */
     private void doStartThread() {
         assert thread == null;
         executor.execute(new Runnable() {
             @Override
             public void run() {
+                // 绑定线程
                 thread = Thread.currentThread();
                 if (interrupted) {
                     thread.interrupt();
@@ -894,6 +906,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
+                    // 启动eventLoop
                     SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {

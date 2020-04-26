@@ -108,11 +108,20 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     /**
      * The NIO {@link Selector}.
+     *
+     * 如果采用优化策略，即io.netty.noKeySetOptimization=true(默认是false)
+     * 那么selector字段的值为包装之后的Selector
+     * 如果不采用优化策略，那么这两个字段都是一样的，都为jdk原生的Selector
      */
     private Selector selector;
     private Selector unwrappedSelector;
+    /**
+     * 用来存储SelectionKey，在没有进行优化的情况下，这个字段为null
+     */
     private SelectedSelectionKeySet selectedKeys;
-
+    /**
+     * selector工厂类，通过SelectorProvider.openSelector()，可创建一个Selector
+     */
     private final SelectorProvider provider;
 
     /**
@@ -139,9 +148,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             throw new NullPointerException("selectStrategy");
         }
         provider = selectorProvider;
+        // 打开一个多路复用器，如果在linux平台，这里就是epoll文件句柄在jdk中的封装对象
         final SelectorTuple selectorTuple = openSelector();
         selector = selectorTuple.selector;
         unwrappedSelector = selectorTuple.unwrappedSelector;
+        // 选择策略，SelectStrategyFactory.newSelectStrategy()
+        //
         selectStrategy = strategy;
     }
 
@@ -163,15 +175,32 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private SelectorTuple openSelector() {
         final Selector unwrappedSelector;
         try {
+            // 获取Selector
+            // linux下为epoll句柄，macos为kqueue句柄，jdk对不同平台的句柄进行了封装，也就是Selector对象
+            // windows不知道，辣鸡windows
             unwrappedSelector = provider.openSelector();
         } catch (IOException e) {
             throw new ChannelException("failed to open a new selector", e);
         }
 
+        // 判断是否需要对sun.nio.ch.SelectorImpl中的selectedKeys进行优化
+        // 如果不进行优化，那么创建一个包装类就直接就返回了
         if (DISABLE_KEYSET_OPTIMIZATION) {
             return new SelectorTuple(unwrappedSelector);
         }
 
+        /**
+         * netty优化SelectorImpl，主要是优化了这个实现类中的selectedKeys和publicSelectedKeys这两个字段
+         *
+         * 原始的这两个字段采用的是hashset来存储SelectionKey，
+         * 1 hashSet扩容会有性能问题
+         * 2 hashSet.add()数据的时候，时间复杂度是O(n),n为同槽中链表的长度
+         *
+         * netty采用了数组来存储SelectionKey，同时替换原来的hashSet
+         * 1 避免了扩容带来的性能问题
+         * 2 add()数据时，时间复杂度O(1)
+         */
+        // 尝试获取sun.nio.ch.SelectorImpl的class对象
         Object maybeSelectorImplClass = AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
             public Object run() {
@@ -186,26 +215,39 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
         });
 
+
+        // 如果返回maybeSelectorImplClass不是一个class对象
+        // 或者maybeSelectorImplClass不是(unwrappedSelector.getClass()他的子类。
         if (!(maybeSelectorImplClass instanceof Class) ||
             // ensure the current selector implementation is what we can instrument.
             !((Class<?>) maybeSelectorImplClass).isAssignableFrom(unwrappedSelector.getClass())) {
+
+            // 如果是异常说明上面方法抛出异常
             if (maybeSelectorImplClass instanceof Throwable) {
                 Throwable t = (Throwable) maybeSelectorImplClass;
                 logger.trace("failed to instrument a special java.util.Set into: {}", unwrappedSelector, t);
             }
+
+            // 创建一个SelectorTuple，内部unwrappedSelector并没有被优化
             return new SelectorTuple(unwrappedSelector);
         }
 
+
+        // selector的class对象
         final Class<?> selectorImplClass = (Class<?>) maybeSelectorImplClass;
+
+        // 内部采用数组实现的伪set
         final SelectedSelectionKeySet selectedKeySet = new SelectedSelectionKeySet();
 
         Object maybeException = AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
             public Object run() {
                 try {
+                    // 反射获取selectedKeys和publicSelectedKeys属性
                     Field selectedKeysField = selectorImplClass.getDeclaredField("selectedKeys");
                     Field publicSelectedKeysField = selectorImplClass.getDeclaredField("publicSelectedKeys");
 
+                    // jdk版本判断
                     if (PlatformDependent.javaVersion() >= 9 && PlatformDependent.hasUnsafe()) {
                         // Let us try to use sun.misc.Unsafe to replace the SelectionKeySet.
                         // This allows us to also do this in Java9+ without any extra flags.
@@ -231,7 +273,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                     if (cause != null) {
                         return cause;
                     }
-
+                    // 把原来属性设置为selectedKeySet（它是数组实现)，原来是hashSet实现
                     selectedKeysField.set(unwrappedSelector, selectedKeySet);
                     publicSelectedKeysField.set(unwrappedSelector, selectedKeySet);
                     return null;
@@ -249,8 +291,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             logger.trace("failed to instrument a special java.util.Set into: {}", unwrappedSelector, e);
             return new SelectorTuple(unwrappedSelector);
         }
+        // 赋值
         selectedKeys = selectedKeySet;
         logger.trace("instrumented a special java.util.Set into: {}", unwrappedSelector);
+        // 创建一个包装类，第二个参数为包装之后的selector
         return new SelectorTuple(unwrappedSelector,
                                  new SelectedSelectionKeySetSelector(unwrappedSelector, selectedKeySet));
     }
